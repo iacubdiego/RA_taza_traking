@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AR Experiencias – gcoop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f5f0eb;
+      --fg: #1a1a1a;
+      --accent: #2c5282;
+      --muted: #8c8272;
+      --card-bg: #fff;
+      --card-border: #e2ddd5;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { font-size: 16px; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 3rem 2rem 2rem;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    header h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+    header p {
+      margin-top: .8rem;
+      color: var(--muted);
+      font-size: .95rem;
+      line-height: 1.6;
+      max-width: 520px;
+    }
+    header .line {
+      width: 48px; height: 2px;
+      background: var(--accent);
+      margin-top: 1.5rem;
+    }
+
+    /* ── Grid de proyectos ── */
+    .projects {
+      max-width: 800px;
+      margin: 2rem auto 4rem;
+      padding: 0 2rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: .6rem;
+      padding: 1.8rem;
+      text-decoration: none;
+      color: var(--fg);
+      transition: transform .2s, box-shadow .2s;
+      display: flex;
+      flex-direction: column;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.08);
+    }
+
+    .card .tag {
+      display: inline-block;
+      font-size: .65rem;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: .15rem .5rem;
+      border-radius: 2rem;
+      margin-bottom: 1rem;
+      align-self: flex-start;
+    }
+    .card h2 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.35rem;
+      font-weight: 400;
+      line-height: 1.3;
+    }
+    .card p {
+      margin-top: .6rem;
+      font-size: .85rem;
+      color: var(--muted);
+      line-height: 1.55;
+      flex: 1;
+    }
+    .card .arrow {
+      margin-top: 1.2rem;
+      font-size: .8rem;
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* ── Footer ── */
+    footer {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+      border-top: 1px solid var(--card-border);
+      font-size: .75rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Experiencias AR</h1>
+    <p>
+      Colección de experiencias de realidad aumentada para la web.
+      Apuntá la cámara de tu teléfono a los objetos indicados.
+      No requiere instalar ninguna aplicación.
+    </p>
+    <div class="line"></div>
+  </header>
+
+  <section class="projects">
+
+    <!-- ═══ Proyecto: Taza Abuelas ═══ -->
+    <a class="card" href="/taza-abuelas/">
+      <span class="tag">Image Tracking</span>
+      <h2>Taza Abuelas de Plaza de Mayo</h2>
+      <p>
+        Apuntá la cámara a la taza con el logo de Abuelas.
+        Un pañuelo blanco orbita alrededor de la taza en realidad aumentada.
+      </p>
+      <span class="arrow">Abrir experiencia →</span>
+    </a>
+
+    <!--
+      ═══ TEMPLATE: Copiar este bloque para agregar nuevos proyectos ═══
+
+    <a class="card" href="/nombre-del-proyecto/">
+      <span class="tag">Image Tracking</span>
+      <h2>Título del Proyecto</h2>
+      <p>
+        Descripción breve de la experiencia AR.
+      </p>
+      <span class="arrow">Abrir experiencia →</span>
+    </a>
+
+    -->
+
+  </section>
+
+  <footer>
+    gcoop — Cooperativa de Software Libre
+  </footer>
+
+</body>
+</html>
