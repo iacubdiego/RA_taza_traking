@@ -114,6 +114,20 @@
     <p>Iniciando cámara…</p>
   </div>
 
+  <!-- Botón de inicio: desbloquea audio en iOS -->
+  <div id="start-overlay" style="
+    position:fixed; inset:0; z-index:998;
+    display:none; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.6);
+  ">
+    <button id="start-btn" style="
+      background:#fff; color:#1a1a1a; border:none;
+      padding:1rem 2.5rem; border-radius:2rem;
+      font:600 1.1rem/1 system-ui,sans-serif;
+      cursor:pointer;
+    ">Iniciar experiencia</button>
+  </div>
+
   <div id="hint">Apuntá la cámara al marker de la taza</div>
 
   <!-- ── Botón + panel de calibración ─────────────────── -->
@@ -174,6 +188,24 @@
         document.getElementById('debug-cup').setAttribute('visible', this.checked);
       "> Mostrar forma taza (debug)
     </label>
+
+    <hr style="border:none;border-top:1px solid #555;margin-top:.6rem">
+    <strong style="font-size:.7rem">Base</strong>
+
+    <label>Radio base: <span class="vv" id="v-br">1.0</span>
+      <input type="range" min="0.3" max="2.5" step="0.05" value="1.0" oninput="
+        document.getElementById('v-br').textContent=this.value;
+        document.getElementById('ar-base').setAttribute('radius', this.value);
+      ">
+    </label>
+
+    <label>Altura base (Y): <span class="vv" id="v-by">-0.6</span>
+      <input type="range" min="-1.5" max="0.5" step="0.05" value="-0.6" oninput="
+        document.getElementById('v-by').textContent=this.value;
+        var b=document.getElementById('ar-base');
+        b.setAttribute('position',{x:0, y:parseFloat(this.value), z:0});
+      ">
+    </label>
   </div>
 
   <!-- ═════════════════════════════════════════════════════
@@ -195,6 +227,8 @@
   >
     <a-assets>
       <img id="panuelo-tex" src="./assets/panuelo.png" crossorigin="anonymous" />
+      <img id="base-tex" src="./assets/base.png" crossorigin="anonymous" />
+      <audio id="audio-detect" src="./assets/audio.mp3" preload="auto"></audio>
     </a-assets>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -264,19 +298,76 @@
           visible="false"
         ></a-cylinder>
 
+        <!--
+          BASE: imagen circular debajo de la taza.
+          Rotada -90° en X para quedar horizontal (plana sobre la mesa).
+          position.y = mitad negativa del height del occluder (base de la taza).
+          El radius de la base es un poco mayor que el radio de órbita
+          para que se vea como plataforma.
+        -->
+        <a-circle
+          id="ar-base"
+          radius="1.0"
+          rotation="-90 0 0"
+          position="0 -0.6 0"
+          material="
+            src: #base-tex;
+            transparent: true;
+            alphaTest: 0.1;
+            side: double;
+          "
+        ></a-circle>
+
       </a-entity>
     </a-entity>
   </a-scene>
 
   <script>
-    const scene   = document.querySelector('a-scene');
-    const overlay = document.getElementById('loading-overlay');
-    const hint    = document.getElementById('hint');
-    const target  = document.querySelector('[mindar-image-target]');
+    const scene        = document.querySelector('a-scene');
+    const overlay      = document.getElementById('loading-overlay');
+    const startOverlay = document.getElementById('start-overlay');
+    const startBtn     = document.getElementById('start-btn');
+    const hint         = document.getElementById('hint');
+    const target       = document.querySelector('[mindar-image-target]');
 
-    scene.addEventListener('arReady', () => overlay.classList.add('hidden'));
-    target.addEventListener('targetFound', () => hint.classList.add('hidden'));
-    target.addEventListener('targetLost',  () => hint.classList.remove('hidden'));
+    let audioUnlocked = false;
+    let audioPlayed   = false;
+    const audio       = document.getElementById('audio-detect');
+
+    // 1. Cuando la escena AR está lista, mostrar botón de inicio
+    scene.addEventListener('arReady', () => {
+      overlay.classList.add('hidden');
+      startOverlay.style.display = 'flex';
+    });
+
+    // 2. El tap desbloquea audio en iOS y oculta el overlay
+    startBtn.addEventListener('click', () => {
+      // iOS necesita un play() dentro de un gesto del usuario
+      audio.play().then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        audioUnlocked = true;
+      }).catch(() => {
+        // Si falla, al menos lo intentamos
+        audioUnlocked = true;
+      });
+      startOverlay.style.display = 'none';
+    });
+
+    // 3. Al detectar el marker: ocultar hint + reproducir audio una vez
+    target.addEventListener('targetFound', () => {
+      hint.classList.add('hidden');
+
+      if (audioUnlocked && !audioPlayed) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+        audioPlayed = true;
+      }
+    });
+
+    target.addEventListener('targetLost', () => {
+      hint.classList.remove('hidden');
+    });
   </script>
 </body>
 </html>
