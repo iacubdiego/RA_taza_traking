@@ -69,7 +69,12 @@
   </div>
 
   <a-scene
-    mindar-image="imageTargetSrc: ./targets/taza-marker.mind; maxTrack: 1; filterMinCF: 0.001; filterBeta: 10; warmupTolerance: 5; missTolerance: 5;"
+    mindar-image="
+      imageTargetSrc: ./targets/taza-marker.mind;
+      maxTrack: 1;
+      filterMinCF: 0.0001;  filterBeta: 0.001;    warmupTolerance: 5;
+      missTolerance: 5;
+    "
     color-space="sRGB"
     renderer="colorManagement: true; antialias: true; alpha: true"
     vr-mode-ui="enabled: false"
