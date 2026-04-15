@@ -738,25 +738,68 @@
   }
 
   /* ── Verificar soporte WebXR al cargar ───────────────── */
+  /*
+   * Se corre PRIMERO antes de inicializar Three.js.
+   * Si el browser no soporta WebXR no tiene sentido
+   * cargar nada más.
+   *
+   * Problemas conocidos que causan que se quede en
+   * "Verificando soporte...":
+   *   1. navigator.xr existe pero isSessionSupported nunca
+   *      resuelve (Samsung Browser, Chrome antiguo, etc.)
+   *      → resuelto con timeout de 4 segundos
+   *   2. initThree() falla (WebGL bloqueado) antes de llegar
+   *      a checkWebXRSupport()
+   *      → resuelto llamando checkWebXRSupport() primero
+   *   3. loadAssets() cuelga
+   *      → resuelto con timeout en la carga
+   */
   async function checkWebXRSupport() {
+    const btn  = document.getElementById('btn-start');
+    const note = document.getElementById('landing-note');
+
+    // Mostrar info de diagnóstico
+    const ua = navigator.userAgent;
+    console.log('[XR] User Agent:', ua);
+    console.log('[XR] navigator.xr:', !!navigator.xr);
+
     if (!navigator.xr) {
+      note.textContent = 'navigator.xr no disponible en este browser';
+      console.warn('[XR] navigator.xr no existe');
       showUnsupported();
       return;
     }
+
     try {
-      const supported = await navigator.xr.isSessionSupported('immersive-ar');
+      // Timeout de seguridad: si isSessionSupported no responde en 4s
+      // consideramos que no está soportado
+      const supported = await Promise.race([
+        navigator.xr.isSessionSupported('immersive-ar'),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 4000)
+        )
+      ]);
+
       if (supported) {
-        const btn = document.getElementById('btn-start');
         btn.textContent = 'Iniciar AR';
         btn.disabled = false;
         btn.addEventListener('click', startAR);
-        document.getElementById('landing-note').textContent =
-          'WebXR con ARCore detectado ✓';
-        console.log('[XR] immersive-ar soportado');
+        note.textContent = 'WebXR + ARCore detectado ✓';
+        note.style.color = '#276749';
+        console.log('[XR] immersive-ar soportado ✓');
       } else {
+        console.warn('[XR] immersive-ar no soportado (isSessionSupported → false)');
+        note.textContent = 'immersive-ar no disponible en este dispositivo';
         showUnsupported();
       }
     } catch (e) {
+      if (e.message === 'timeout') {
+        console.warn('[XR] isSessionSupported no respondió en 4s — asumiendo no soportado');
+        note.textContent = 'WebXR no respondió (timeout)';
+      } else {
+        console.warn('[XR] error en isSessionSupported:', e.message);
+        note.textContent = 'Error: ' + e.message;
+      }
       showUnsupported();
     }
   }
@@ -764,26 +807,32 @@
   function showUnsupported() {
     document.getElementById('landing').style.display = 'none';
     document.getElementById('unsupported').style.display = 'flex';
-    console.warn('[XR] immersive-ar no soportado en este dispositivo/browser');
+    console.warn('[XR] mostrando pantalla de no soporte');
   }
 
   /* ── Cargar textura del pañuelo ──────────────────────── */
   function loadAssets() {
     return new Promise((resolve) => {
+      // Timeout de seguridad: si la carga tarda más de 5s, continuar igual
+      const timeout = setTimeout(() => {
+        console.warn('[ASSET] timeout cargando panuelo.png — usando fallback');
+        resolve();
+      }, 5000);
+
       const loader = new THREE.TextureLoader();
-      // Referencia a los assets del proyecto taza-abuelas
       loader.load(
         '../taza-abuelas/assets/panuelo.png',
         (tex) => {
+          clearTimeout(timeout);
           panueloTexture = tex;
           console.log('[ASSET] panuelo.png cargado');
           resolve();
         },
         undefined,
         () => {
-          // Fallback: textura de color blanco si el asset no existe
+          clearTimeout(timeout);
           console.warn('[ASSET] panuelo.png no encontrado — usando color blanco');
-          panueloTexture = new THREE.Texture();
+          panueloTexture = null;
           resolve();
         }
       );
@@ -792,25 +841,40 @@
 
   /* ── Arranque ────────────────────────────────────────── */
   (async () => {
-    initThree();
+    // 1. Verificar soporte WebXR PRIMERO (antes de cargar Three.js)
+    // Si no hay soporte, no tiene sentido inicializar nada más
+    await checkWebXRSupport();
+
+    // Si se mostró la pantalla de no soporte, cortar acá
+    if (document.getElementById('unsupported').style.display === 'flex') return;
+
+    // 2. Inicializar Three.js y escena
+    try {
+      initThree();
+    } catch (e) {
+      console.error('[THREE] error al inicializar:', e);
+      document.getElementById('landing-note').textContent = 'Error WebGL: ' + e.message;
+      return;
+    }
+
     await loadAssets();
     createReticle();
     createARScene();
 
-    // Parchar el render loop para capturar placements
+    // 3. Render loop principal
     renderer.setAnimationLoop((time, frame) => {
-      // Lógica de placement pendiente
+      // Placement pendiente (tap del usuario)
       if (pendingPlacement && frame && hitTestSource) {
         const referenceSpace = renderer.xr.getReferenceSpace();
         placeScene(frame, referenceSpace);
         pendingPlacement = false;
       }
 
-      // Lógica principal (duplicada del startRenderLoop para tener acceso al frame)
       if (frame) {
-        const session       = renderer.xr.getSession();
+        const session        = renderer.xr.getSession();
         const referenceSpace = renderer.xr.getReferenceSpace();
 
+        // Configurar hit-test source la primera vez
         if (!hitTestSourceRequested) {
           session.requestReferenceSpace('viewer').then(viewerSpace => {
             session.requestHitTestSource({ space: viewerSpace }).then(source => {
@@ -825,6 +889,7 @@
           hitTestSourceRequested = true;
         }
 
+        // Actualizar reticle
         if (hitTestSource) {
           const hits = frame.getHitTestResults(hitTestSource);
           if (hits.length > 0 && !placed) {
@@ -839,6 +904,7 @@
           }
         }
 
+        // Actualizar posición desde anchor (mantiene la escena fija en el mundo)
         if (xrAnchor && xrAnchor.anchorSpace && sceneGroup) {
           const anchorPose = frame.getPose(xrAnchor.anchorSpace, referenceSpace);
           if (anchorPose) {
@@ -862,13 +928,10 @@
         lastTime = time;
       }
 
-      // Billboard
       updateBillboard();
-
       renderer.render(scene, camera);
     });
 
-    checkWebXRSupport();
   })();
   </script>
 
