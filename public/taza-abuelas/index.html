@@ -3,118 +3,415 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>AR Taza – Pañuelo Orbitante</title>
+  <title>AR Taza – Abuelas de Plaza de Mayo</title>
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-  <script src="./assets/js/ar-components.js"></script>
-  <link rel="stylesheet" href="./assets/styles.css">
+  <style>
+    * { margin: 0; padding: 0; }
+    html, body { overflow: hidden; width: 100%; height: 100%; }
+
+    #loading-overlay {
+      position: fixed; inset: 0; z-index: 999;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: #000; color: #fff;
+      font-family: system-ui, sans-serif;
+      transition: opacity .4s;
+    }
+    #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 3px solid rgba(255,255,255,.15);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin-bottom: 1.2rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Botón inicio — desbloqueo de audio iOS */
+    #start-overlay {
+      position: fixed; inset: 0; z-index: 998;
+      display: none;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,.6);
+    }
+    #start-btn {
+      background: #fff; color: #1a1a1a; border: none;
+      padding: 1rem 2.5rem; border-radius: 2rem;
+      font: 600 1.1rem/1 system-ui, sans-serif;
+      cursor: pointer;
+    }
+
+    #hint {
+      position: fixed; bottom: 2rem; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,.7); color: #fff;
+      padding: .6rem 1.2rem; border-radius: 2rem;
+      font: 500 .85rem/1.3 system-ui, sans-serif;
+      z-index: 10; transition: opacity .3s;
+      pointer-events: none;
+    }
+    #hint.hidden { opacity: 0; }
+
+    /* Panel calibración */
+    #cal-btn {
+      position: fixed; top: .5rem; right: .5rem; z-index: 21;
+      background: rgba(0,0,0,.75); color: #fff; border: none;
+      padding: .4rem .7rem; border-radius: .4rem;
+      font-size: .8rem; cursor: pointer;
+    }
+    #cal-panel {
+      position: fixed; top: .5rem; right: .5rem; z-index: 20;
+      background: rgba(0,0,0,.85); color: #fff;
+      padding: .8rem; border-radius: .6rem;
+      font: 400 .72rem/1.6 system-ui, sans-serif;
+      width: 230px; display: none;
+    }
+    #cal-panel label { display: block; margin-top: .2rem; }
+    #cal-panel input[type=range] { width: 100%; }
+    #cal-panel .v { color: #0f0; font-family: monospace; }
+    #cal-panel hr { border: none; border-top: 1px solid #444; margin: .5rem 0; }
+    #cal-panel .close {
+      float: right; background: none; border: none;
+      color: #fff; cursor: pointer; font-size: .9rem;
+    }
+  </style>
+
+  <script>
+    /*
+     * MEDIDAS REALES DE LA TAZA
+     * ─────────────────────────
+     * Alto:         9.8 cm
+     * Diámetro:     8.1 cm  → radio = 4.05 cm
+     * Circunf.:    26.0 cm  (verificación: 26/π ≈ 8.27 cm ✓)
+     * Pared:        4 mm    → radio interior = 3.65 cm
+     * Logo Y:       1.9 cm desde arriba → 7.0 cm desde arriba
+     *               centro logo = 4.45 cm desde arriba
+     *               centro taza = 4.90 cm desde arriba
+     *               Δ Y = -0.45 cm (taza más baja que logo)
+     *
+     * MARCADOR: 5 × 5 cm → 1 unidad = 5 cm
+     * ──────────────────────────────────────
+     * Z offset (eje taza)  = -radio/u  = -4.05/5 = -0.81
+     * Y offset (corrección)= -ΔY/u     = -0.45/5 = -0.09
+     * Occluder radius      = 3.65/5             =  0.73
+     * Occluder height      = 9.8/5              =  1.96
+     * Orbit radius         = 4.05/5 + 0.10      =  0.91
+     */
+
+    /* ── orbit-animation ─────────────────────────────────── */
+    AFRAME.registerComponent('orbit-animation', {
+      schema: {
+        speed:  { type: 'number',  default: 40 },
+        paused: { type: 'boolean', default: false }
+      },
+      init() { this._angle = 0; },
+      tick(_, delta) {
+        if (this.data.paused) return;
+        this._angle = (this._angle + (delta / 1000) * this.data.speed) % 360;
+        this.el.object3D.rotation.y = THREE.MathUtils.degToRad(this._angle);
+      }
+    });
+
+    /* ── billboard ───────────────────────────────────────── */
+    AFRAME.registerComponent('billboard', {
+      tick() {
+        const cam = this.el.sceneEl.camera;
+        if (!cam) return;
+        this.el.object3D.lookAt(cam.getWorldPosition(new THREE.Vector3()));
+      }
+    });
+
+    /* ── occluder ────────────────────────────────────────── */
+    AFRAME.registerComponent('occluder', {
+      init() {
+        const apply = () => {
+          const mesh = this.el.getObject3D('mesh');
+          if (!mesh) return;
+          mesh.traverse((node) => {
+            if (node.isMesh) {
+              node.material = new THREE.MeshBasicMaterial({ colorWrite: false });
+              node.renderOrder = -1;
+            }
+          });
+        };
+        setTimeout(apply, 0);
+        this.el.addEventListener('object3dset', apply);
+      }
+    });
+  </script>
 </head>
 
 <body>
+
+  <!-- Loading -->
   <div id="loading-overlay">
     <div class="spinner"></div>
     <p>Iniciando cámara…</p>
   </div>
 
+  <!-- Inicio (desbloqueo audio iOS) -->
   <div id="start-overlay">
     <button id="start-btn">Iniciar experiencia</button>
   </div>
 
-  <div id="hint">Apuntá la cámara al marker de la taza</div>
-  
-  <button id="audio-btn">🔊</button>
+  <!-- Hint tracking -->
+  <div id="hint">Apuntá la cámara al logo de la taza</div>
 
-  <button id="cal-btn">⚙ Calibrar</button>
+  <!-- Botón calibración -->
+  <button id="cal-btn" onclick="
+    document.getElementById('cal-panel').style.display='block';
+    this.style.display='none';
+  ">⚙ Calibrar</button>
 
+  <!-- Panel calibración -->
   <div id="cal-panel">
-    <button class="close">✕</button>
+    <button class="close" onclick="
+      this.parentElement.style.display='none';
+      document.getElementById('cal-btn').style.display='block';
+    ">✕</button>
     <strong>Calibración en vivo</strong>
 
-    <label>Radio órbita: <span class="vv" id="v-r">0.7</span>
-      <input type="range" id="in-r" min="0.2" max="2.0" step="0.05" value="0.7">
+    <hr>
+    <strong style="font-size:.7rem">Pañuelo</strong>
+
+    <label>Radio órbita: <span class="v" id="v-r">0.91</span>
+      <input type="range" min="0.3" max="2.0" step="0.02" value="0.91" oninput="
+        document.getElementById('v-r').textContent = (+this.value).toFixed(2);
+        document.getElementById('panuelo').setAttribute('position', this.value + ' 0 0');
+      ">
     </label>
 
-    <label>Profundidad centro (Z): <span class="vv" id="v-z">-0.65</span>
-      <input type="range" id="in-z" min="-2.0" max="0.5" step="0.05" value="-0.65">
+    <label>Tamaño pañuelo: <span class="v" id="v-sz">0.35</span>
+      <input type="range" min="0.1" max="1.0" step="0.05" value="0.35" oninput="
+        document.getElementById('v-sz').textContent = (+this.value).toFixed(2);
+        document.getElementById('panuelo').setAttribute('width',  this.value);
+        document.getElementById('panuelo').setAttribute('height', this.value);
+      ">
     </label>
 
-    <label>Altura centro (Y): <span class="vv" id="v-h">0</span>
-      <input type="range" id="in-h" min="-1.0" max="1.0" step="0.05" value="0">
+    <label>Velocidad (°/s): <span class="v" id="v-sp">40</span>
+      <input type="range" min="5" max="120" step="5" value="40" oninput="
+        document.getElementById('v-sp').textContent = this.value;
+        document.getElementById('orbit-pivot').setAttribute('orbit-animation', 'speed', this.value);
+      ">
     </label>
 
-    <label>Tamaño pañuelo: <span class="vv" id="v-s">0.35</span>
-      <input type="range" id="in-s" min="0.1" max="1.0" step="0.05" value="0.35">
+    <hr>
+    <strong style="font-size:.7rem">Posición eje</strong>
+
+    <label>Z offset (profundidad): <span class="v" id="v-z">-0.81</span>
+      <input type="range" min="-2.0" max="0" step="0.02" value="-0.81" oninput="
+        document.getElementById('v-z').textContent = (+this.value).toFixed(2);
+        var c = document.getElementById('orbit-center');
+        var p = c.getAttribute('position');
+        c.setAttribute('position', {x: p.x, y: p.y, z: parseFloat(this.value)});
+      ">
     </label>
 
-    <label>Velocidad (°/s): <span class="vv" id="v-sp">40</span>
-      <input type="range" id="in-sp" min="10" max="120" step="5" value="40">
+    <label>Y offset (altura): <span class="v" id="v-y">-0.09</span>
+      <input type="range" min="-0.5" max="0.5" step="0.02" value="-0.09" oninput="
+        document.getElementById('v-y').textContent = (+this.value).toFixed(2);
+        var c = document.getElementById('orbit-center');
+        var p = c.getAttribute('position');
+        c.setAttribute('position', {x: p.x, y: parseFloat(this.value), z: p.z});
+      ">
     </label>
 
-    <label>
-      <input type="checkbox" id="chk-debug"> Mostrar forma taza (debug)
+    <hr>
+    <strong style="font-size:.7rem">Occluder (forma taza)</strong>
+
+    <label>Radio: <span class="v" id="v-or">0.73</span>
+      <input type="range" min="0.2" max="1.5" step="0.02" value="0.73" oninput="
+        document.getElementById('v-or').textContent = (+this.value).toFixed(2);
+        document.getElementById('occluder-cyl').setAttribute('radius', this.value);
+        document.getElementById('debug-cyl').setAttribute('radius', this.value);
+      ">
     </label>
 
-    <hr class="cal-divider">
+    <label>Alto: <span class="v" id="v-oh">1.96</span>
+      <input type="range" min="0.5" max="4.0" step="0.05" value="1.96" oninput="
+        document.getElementById('v-oh').textContent = (+this.value).toFixed(2);
+        document.getElementById('occluder-cyl').setAttribute('height', this.value);
+        document.getElementById('debug-cyl').setAttribute('height', this.value);
+      ">
+    </label>
+
+    <hr>
     <strong style="font-size:.7rem">Base</strong>
 
-    <label>Radio base: <span class="vv" id="v-br">1.0</span>
-      <input type="range" id="in-br" min="0.3" max="2.5" step="0.05" value="1.0">
+    <label>Radio base: <span class="v" id="v-br">1.0</span>
+      <input type="range" min="0.3" max="2.5" step="0.05" value="1.0" oninput="
+        document.getElementById('v-br').textContent = (+this.value).toFixed(2);
+        document.getElementById('ar-base').setAttribute('radius', this.value);
+      ">
     </label>
 
-    <label>Altura base (Y): <span class="vv" id="v-by">-0.6</span>
-      <input type="range" id="in-by" min="-1.5" max="0.5" step="0.05" value="-0.6">
+    <label>Altura base (Y): <span class="v" id="v-by">-1.07</span>
+      <input type="range" min="-2.5" max="0.5" step="0.05" value="-1.07" oninput="
+        document.getElementById('v-by').textContent = (+this.value).toFixed(2);
+        document.getElementById('ar-base').setAttribute('position', '0 ' + this.value + ' 0');
+      ">
+    </label>
+
+    <hr>
+    <label>
+      <input type="checkbox" onchange="
+        document.getElementById('debug-cyl').setAttribute('visible', this.checked);
+      "> Ver forma taza (debug)
     </label>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════
+       ESCENA AR
+       ═══════════════════════════════════════════════════════ -->
   <a-scene
     mindar-image="
       imageTargetSrc: ./targets/taza-marker.mind;
       maxTrack: 1;
-      filterMinCF: 0.001;   filterBeta: 0.01;     warmupTolerance: 2;   missTolerance: 3;     "
+      filterMinCF: 0.001;
+      filterBeta: 10;
+      warmupTolerance: 5;
+      missTolerance: 5;
+    "
     color-space="sRGB"
     renderer="colorManagement: true; antialias: true; alpha: true"
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false"
   >
     <a-assets>
-      <img id="panuelo-tex" src="./assets/panuelo.png" crossorigin="anonymous" />
-      <img id="base-tex" src="./assets/base.png" crossorigin="anonymous" />
+      <img id="panuelo-tex" src="./assets/panuelo.png"  crossorigin="anonymous" />
+      <img id="base-tex"    src="./assets/base.png"     crossorigin="anonymous" />
+      <audio id="audio-detect" src="./assets/audio.mp3" preload="auto"></audio>
     </a-assets>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
+    <!-- TARGET: marker en el costado de la taza -->
     <a-entity mindar-image-target="targetIndex: 0">
-      <a-entity id="orbit-center" position="0 0 -0.65">
-        
+
+      <!--
+        SISTEMA DE COORDENADAS (marker en el costado):
+        • Origen = centro del logo
+        • Y = vertical (↑ cuando la taza está parada) ← ya correcto, no hace falta rotar
+        • Z = sale del marker hacia la cámara
+        • 1 unidad = 5 cm (ancho del marcador)
+
+        Centro de la taza:
+        • Z = -0.81  (radio de la taza detrás del marker)
+        • Y = -0.09  (el centro geométrico de la taza está 0.45cm más abajo que el logo)
+      -->
+      <a-entity id="orbit-center" position="0 -0.09 -0.81">
+
+        <!-- Pivot que rota en Y → órbita horizontal -->
         <a-entity id="orbit-pivot" orbit-animation="speed: 40">
+
+          <!-- Pañuelo a radio de órbita en X -->
           <a-plane
             id="panuelo"
-            position="0.7 0 0" width="0.35" height="0.35"
-            material="src: #panuelo-tex; transparent: true; alphaTest: 0.5; side: double;"
+            position="0.91 0 0"
+            width="0.35"
+            height="0.35"
+            material="
+              src: #panuelo-tex;
+              transparent: true;
+              alphaTest: 0.5;
+              side: double;
+            "
             billboard
           ></a-plane>
+
         </a-entity>
 
-        <a-cylinder id="cup-occluder" radius="0.55" height="1.2" position="0 0 0" occluder></a-cylinder>
-
+        <!-- OCCLUDER: cilindro invisible con forma de taza -->
         <a-cylinder
-          id="debug-cup" radius="0.55" height="1.2" position="0 0 0"
+          id="occluder-cyl"
+          radius="0.73"
+          height="1.96"
+          occluder
+        ></a-cylinder>
+
+        <!-- DEBUG: misma forma pero visible (desactivado por defecto) -->
+        <a-cylinder
+          id="debug-cyl"
+          radius="0.73"
+          height="1.96"
           material="color: #ff0066; opacity: 0.25; transparent: true; side: double"
           visible="false"
         ></a-cylinder>
 
+        <!-- BASE: imagen circular horizontal bajo la taza -->
+        <!--
+          Y base = -(occluder_height/2) + Y_offset_suelo
+          = -(1.96/2) - 0.09 ≈ -1.07
+          Ajustable con el panel de calibración.
+        -->
         <a-circle
-          id="ar-base" radius="1.0" rotation="-90 0 0" position="0 -0.6 0"
-          material="src: #base-tex; transparent: true; alphaTest: 0.1; side: double;"
+          id="ar-base"
+          radius="1.0"
+          rotation="-90 0 0"
+          position="0 -1.07 0"
+          material="
+            src: #base-tex;
+            transparent: true;
+            alphaTest: 0.1;
+            side: double;
+          "
         ></a-circle>
 
       </a-entity>
+
     </a-entity>
+
   </a-scene>
-    
-    <audio id="audio-detect" src="./assets/audio.mp3" preload="none"></audio>
-  <script src="./assets/app.js"></script>
+
+  <script>
+    const scene        = document.querySelector('a-scene');
+    const overlay      = document.getElementById('loading-overlay');
+    const hint         = document.getElementById('hint');
+    const startOverlay = document.getElementById('start-overlay');
+    const startBtn     = document.getElementById('start-btn');
+    const target       = document.querySelector('[mindar-image-target]');
+    const audio        = document.getElementById('audio-detect');
+
+    let audioUnlocked = false;
+    let audioPlayed   = false;
+
+    // 1. Al cargar la escena: ocultar spinner y mostrar botón de inicio
+    scene.addEventListener('arReady', () => {
+      overlay.classList.add('hidden');
+      startOverlay.style.display = 'flex';
+    });
+
+    // 2. Botón inicio: desbloquear audio en iOS
+    startBtn.addEventListener('click', () => {
+      audio.play().then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        audioUnlocked = true;
+      }).catch(() => {
+        audioUnlocked = true;
+      });
+      startOverlay.style.display = 'none';
+    });
+
+    // 3. Al detectar el marker: ocultar hint + reproducir audio una vez
+    target.addEventListener('targetFound', () => {
+      hint.classList.add('hidden');
+      if (audioUnlocked && !audioPlayed) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+        audioPlayed = true;
+      }
+    });
+
+    target.addEventListener('targetLost', () => {
+      hint.classList.remove('hidden');
+    });
+  </script>
+
 </body>
 </html>
