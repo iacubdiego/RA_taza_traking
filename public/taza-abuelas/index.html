@@ -305,6 +305,156 @@
         console.log('[smooth-target] factor actualizado →', this.data.factor);
       }
     });
+
+    /* ──────────────────────────────────────────────────────
+     * COMPONENTE: angle-compensation
+     * ──────────────────────────────────────────────────────
+     * PROBLEMA QUE RESUELVE:
+     *   El marker está impreso sobre una superficie cilíndrica
+     *   curva. MindAR asume que el marker es plano. Cuando la
+     *   cámara está de costado, los feature points del lado
+     *   izquierdo del marker están físicamente más lejos de la
+     *   cámara que los del lado derecho (siguen la curva del
+     *   cilindro). MindAR interpreta esta diferencia de
+     *   profundidad como una rotación del marker plano, y
+     *   produce un error de traslación en X que crece con el
+     *   ángulo de visión.
+     *
+     * GEOMETRÍA:
+     *   Marker width  W = 6.5cm = 1 unidad MindAR
+     *   Radio taza    R = 4.05cm = 0.623 unidades
+     *
+     *   La profundidad que gana un punto en el borde del marker
+     *   (x = W/2) respecto al centro, por la curvatura:
+     *     Δz = R - R·cos(W/2/R) ≈ W²/(8R) = 1.30cm = 0.2u
+     *
+     *   Cuando la cámara está al ángulo θ, ese Δz se proyecta
+     *   como un shift lateral aparente de:
+     *     shift_x ≈ Δz · sin(θ) = (W²/8R) · sin(θ)
+     *
+     *   En unidades MindAR (W=1):
+     *     correction_x = -(1/(8 · R/W)) · sin(θ)
+     *                  = -(1/(8 · 0.623)) · sin(θ)
+     *                  = -0.2006 · sin(θ)
+     *
+     *   El signo negativo corrige en dirección opuesta al error.
+     *
+     * CÓMO FUNCIONA:
+     *   Cada frame, convierte la posición de la cámara al espacio
+     *   local del marker. De ahí extrae el ángulo horizontal θ.
+     *   Aplica la corrección directamente al object3D.position.x
+     *   del orbit-center, sin tocar Y ni Z.
+     *
+     * Props:
+     *   strength  — multiplicador de la corrección (default 1.0)
+     *               0 = sin compensación, 1 = corrección física completa
+     *               >1 = sobrecompensación (útil si la curva es mayor)
+     *   maxAngle  — ángulo máximo en grados al que se aplica la corrección
+     *               (más allá de este ángulo la detección es inestable)
+     */
+    AFRAME.registerComponent('angle-compensation', {
+      schema: {
+        strength: { type: 'number', default: 1.0 },
+        maxAngle: { type: 'number', default: 70 }  // grados
+      },
+
+      init() {
+        // Vectores reutilizables (evitar GC en el tick)
+        this._camWorld  = new THREE.Vector3();
+        this._localCam  = new THREE.Vector3();
+        this._active    = false;
+
+        // Factor físico base: 1 / (8 × radio_en_unidades)
+        // radio_en_unidades = R/W = 4.05/6.5 = 0.623
+        this._baseFactor = 1 / (8 * 0.623); // ≈ 0.2006
+
+        // Referencia al marker entity (padre de orbit-center)
+        // Se resuelve en el primer tick para asegurar que el DOM esté listo
+        this._markerEntity = null;
+
+        // El orbit-center tiene position base configurada en el HTML
+        // Guardamos Y y Z para no tocarlos
+        this._baseY = null;
+        this._baseZ = null;
+
+        // Escuchar targetFound/Lost desde el marker (padre)
+        const bindEvents = () => {
+          const marker = this.el.closest('[mindar-image-target]');
+          if (!marker) return;
+          this._markerEntity = marker;
+          marker.addEventListener('targetFound', () => {
+            this._active = true;
+            console.log('[angle-compensation] tracking activo');
+          });
+          marker.addEventListener('targetLost', () => {
+            this._active = false;
+            // Resetear corrección al perder el marker
+            if (this._baseY !== null) {
+              this.el.object3D.position.set(0, this._baseY, this._baseZ);
+            }
+            console.log('[angle-compensation] tracking perdido — corrección reseteada');
+          });
+        };
+
+        // Intentar inmediato y también al siguiente frame
+        bindEvents();
+        setTimeout(bindEvents, 100);
+
+        console.log('[angle-compensation] inicializado',
+          '— baseFactor:', this._baseFactor.toFixed(4),
+          '— strength:', this.data.strength
+        );
+      },
+
+      tick() {
+        if (!this._active) return;
+
+        const cam = this.el.sceneEl.camera;
+        if (!cam || !this._markerEntity) return;
+
+        // Guardar base Y/Z la primera vez (vienen del HTML)
+        if (this._baseY === null) {
+          this._baseY = this.el.object3D.position.y;
+          this._baseZ = this.el.object3D.position.z;
+          console.log('[angle-compensation] base Y:', this._baseY, 'Z:', this._baseZ);
+        }
+
+        // ── Calcular ángulo horizontal cámara → marker ──────
+        // Posición de la cámara en espacio local del marker entity
+        cam.getWorldPosition(this._camWorld);
+        this._localCam.copy(this._camWorld);
+        this._markerEntity.object3D.worldToLocal(this._localCam);
+
+        // θ: ángulo en el plano XZ local del marker
+        // localCam.x > 0 → cámara a la derecha del marker
+        // localCam.z < 0 → cámara en frente (normal del marker apunta hacia +Z)
+        const theta = Math.atan2(this._localCam.x, -this._localCam.z);
+        const thetaDeg = THREE.MathUtils.radToDeg(theta);
+
+        // No aplicar corrección si el ángulo supera maxAngle
+        // (la detección es muy inestable a ángulos extremos)
+        const maxRad = THREE.MathUtils.degToRad(this.data.maxAngle);
+        if (Math.abs(theta) > maxRad) return;
+
+        // ── Corrección X basada en la geometría de la curvatura ──
+        // correction_x = -baseFactor × sin(θ) × strength
+        const correctionX = -this._baseFactor * Math.sin(theta) * this.data.strength;
+
+        // Aplicar solo X; Y y Z se mantienen de la configuración base
+        this.el.object3D.position.set(correctionX, this._baseY, this._baseZ);
+
+        // ── Actualizar debug overlay ─────────────────────────
+        const dbgAngle = document.getElementById('dbg-angle');
+        const dbgCorr  = document.getElementById('dbg-corr');
+        if (dbgAngle) dbgAngle.textContent = thetaDeg.toFixed(1) + '°';
+        if (dbgCorr)  dbgCorr.textContent  = correctionX.toFixed(3) + 'u';
+      },
+
+      update() {
+        console.log('[angle-compensation] strength →', this.data.strength,
+                    '| maxAngle →', this.data.maxAngle);
+      }
+    });
   </script>
 </head>
 
@@ -336,6 +486,8 @@
     <div><span class="lbl">Audio:     </span><span id="dbg-audio">bloqueado</span></div>
     <div><span class="lbl">Detecciones: </span><span id="dbg-count">0</span></div>
     <div><span class="lbl">Pérdidas:    </span><span id="dbg-lost">0</span></div>
+    <div><span class="lbl">Ángulo cam:  </span><span id="dbg-angle">—</span></div>
+    <div><span class="lbl">Corrección X:</span><span id="dbg-corr">—</span></div>
   </div>
 
   <!-- ── Botón para abrir panel de calibración ─────────── -->
@@ -353,6 +505,35 @@
       document.getElementById('cal-btn').style.display='block';
     ">✕</button>
     <strong>Calibración en vivo</strong>
+
+    <!-- COMPENSACIÓN DE ÁNGULO ──────────────────────────── -->
+    <hr>
+    <div class="sec">Compensación de ángulo</div>
+    <!--
+      Corrige el error de posición X causado por el marker
+      impreso en superficie curva. Ver comentario del componente
+      angle-compensation para la geometría completa.
+
+      strength 0 = sin compensación (comportamiento original)
+      strength 1 = corrección física exacta según la curvatura
+      strength >1 = sobrecompensación (si el error es mayor)
+    -->
+
+    <label>Intensidad: <span class="v" id="v-ac">1.00</span>
+      <input type="range" min="0.0" max="3.0" step="0.05" value="1.0" oninput="
+        document.getElementById('v-ac').textContent = (+this.value).toFixed(2);
+        document.getElementById('orbit-center').setAttribute('angle-compensation', 'strength', this.value);
+        console.log('[CAL] angle-compensation strength →', this.value);
+      ">
+    </label>
+
+    <label>Ángulo máximo: <span class="v" id="v-am">70°</span>
+      <input type="range" min="20" max="90" step="5" value="70" oninput="
+        document.getElementById('v-am').textContent = this.value + '°';
+        document.getElementById('orbit-center').setAttribute('angle-compensation', 'maxAngle', this.value);
+        console.log('[CAL] angle-compensation maxAngle →', this.value);
+      ">
+    </label>
 
     <!-- SUAVIZADO ───────────────────────────────────────── -->
     <hr>
@@ -612,7 +793,7 @@
                           por lo tanto su centro ya coincide con el
                           centro geométrico. Sin corrección necesaria.
       -->
-      <a-entity id="orbit-center" position="0 0 -0.623">
+      <a-entity id="orbit-center" position="0 0 -0.623" angle-compensation="strength: 1.0; maxAngle: 70">
 
         <!-- ──────────────────────────────────────────────────
              ORBIT-PIVOT
