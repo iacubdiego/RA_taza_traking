@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>AR Taza – WebXR</title>
-
+ 
   <!--
     Three.js r128 — compatible con MindAR si en el futuro se combina.
     WebXR está integrado en Three.js desde r122.
   -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
+ 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -20,14 +20,14 @@
       color: #fff;
       overflow: hidden;
     }
-
+ 
     /* ── Canvas de Three.js ──────────────────────────── */
     #c {
       position: fixed; inset: 0;
       display: block;
       width: 100%; height: 100%;
     }
-
+ 
     /* ── Pantalla de inicio (fuera de AR) ────────────── */
     #landing {
       position: fixed; inset: 0; z-index: 10;
@@ -62,7 +62,7 @@
     #btn-start:disabled {
       background: #333; color: #666; cursor: not-allowed;
     }
-
+ 
     /* ── Mensaje de no soporte ───────────────────────── */
     #unsupported {
       position: fixed; inset: 0; z-index: 20;
@@ -80,7 +80,7 @@
       padding: .3rem .6rem; border-radius: .3rem;
       font-size: .8rem; color: #e8d5b0;
     }
-
+ 
     /* ── Overlay DOM (visible dentro de la sesión AR) ── */
     /*
       dom-overlay: permite que elementos HTML se vean sobre el
@@ -92,7 +92,7 @@
       pointer-events: none;
       display: none; /* se activa al entrar en AR */
     }
-
+ 
     /* Instrucción central */
     #ar-hint {
       position: absolute; bottom: 8rem; left: 50%;
@@ -104,7 +104,7 @@
       transition: opacity .3s;
     }
     #ar-hint.hidden { opacity: 0; }
-
+ 
     /* Botón de salir AR */
     #btn-exit {
       position: absolute; top: 1rem; left: 1rem;
@@ -114,7 +114,7 @@
       font-size: .8rem; cursor: pointer;
       pointer-events: all;
     }
-
+ 
     /* Botón reposicionar */
     #btn-reposition {
       position: absolute; bottom: 2rem; left: 50%;
@@ -126,7 +126,7 @@
       cursor: pointer; pointer-events: all;
       display: none;
     }
-
+ 
     /* ── Panel calibración ───────────────────────────── */
     #cal-btn {
       position: absolute; top: 1rem; right: 1rem;
@@ -158,7 +158,7 @@
       float: right; background: none; border: none;
       color: #fff; cursor: pointer; font-size: 1rem;
     }
-
+ 
     /* Debug overlay */
     #dbg {
       position: absolute; bottom: 5rem; left: .5rem;
@@ -171,10 +171,10 @@
   </style>
 </head>
 <body>
-
+ 
   <!-- Canvas Three.js -->
   <canvas id="c"></canvas>
-
+ 
   <!-- ── Pantalla de inicio ─────────────────────────── -->
   <div id="landing">
     <h1>AR Taza<br><span>WebXR</span></h1>
@@ -188,7 +188,7 @@
       Requiere Android Chrome con ARCore instalado.
     </p>
   </div>
-
+ 
   <!-- ── Pantalla sin soporte ───────────────────────── -->
   <div id="unsupported">
     <div class="icon">📵</div>
@@ -206,7 +206,7 @@
       → Ir a AR Taza (MindAR)
     </a>
   </div>
-
+ 
   <!-- ── Overlay DOM (activo durante sesión AR) ────── -->
   <!--
     dom-overlay: este div y sus hijos son visibles sobre
@@ -216,21 +216,21 @@
   <div id="ar-overlay">
     <button id="btn-exit" onclick="exitAR()">✕ Salir</button>
     <button id="cal-btn" onclick="toggleCal()">⚙ Calibrar</button>
-
+ 
     <div id="ar-hint">Apuntá a la mesa y tocá para colocar</div>
-
+ 
     <button id="btn-reposition" onclick="reposition()">
       ↺ Reposicionar
     </button>
-
+ 
     <!-- Panel de calibración -->
     <div id="cal-panel">
       <button class="close" onclick="toggleCal()">✕</button>
       <strong>Calibración</strong>
-
+ 
       <hr>
       <div class="sec">Pañuelo</div>
-
+ 
       <label>Radio órbita: <span class="v" id="v-r">0.055</span> m
         <input type="range" min="0.02" max="0.15" step="0.005" value="0.055"
           oninput="
@@ -240,7 +240,7 @@
             console.log('[CAL] orbit radius →', this.value, 'm');
           ">
       </label>
-
+ 
       <label>Tamaño: <span class="v" id="v-sz">0.04</span> m
         <input type="range" min="0.01" max="0.12" step="0.005" value="0.04"
           oninput="
@@ -249,7 +249,7 @@
             console.log('[CAL] panuelo size →', this.value, 'm');
           ">
       </label>
-
+ 
       <label>Velocidad: <span class="v" id="v-sp">40</span> °/s
         <input type="range" min="5" max="120" step="5" value="40"
           oninput="
@@ -258,10 +258,10 @@
             console.log('[CAL] orbit speed →', this.value);
           ">
       </label>
-
+ 
       <hr>
       <div class="sec">Occluder (forma taza)</div>
-
+ 
       <label>Radio: <span class="v" id="v-or">0.037</span> m
         <input type="range" min="0.01" max="0.08" step="0.002" value="0.037"
           oninput="
@@ -270,7 +270,7 @@
             console.log('[CAL] occluder radius →', this.value, 'm');
           ">
       </label>
-
+ 
       <label>Alto: <span class="v" id="v-oh">0.098</span> m
         <input type="range" min="0.02" max="0.2" step="0.005" value="0.098"
           oninput="
@@ -279,23 +279,23 @@
             console.log('[CAL] occluder height →', this.value, 'm');
           ">
       </label>
-
+ 
       <label>
         <input type="checkbox" id="chk-debug-cyl"
           onchange="toggleDebugCyl(this.checked)">
         Ver cilindro (debug rosa)
       </label>
-
+ 
       <hr>
       <div class="sec">Debug</div>
-
+ 
       <label>
         <input type="checkbox"
           onchange="document.getElementById('dbg').style.display=this.checked?'block':'none'">
         Mostrar info en tiempo real
       </label>
     </div><!-- /#cal-panel -->
-
+ 
     <!-- Debug overlay -->
     <div id="dbg">
       <div>Estado: <span id="d-state">—</span></div>
@@ -303,10 +303,10 @@
       <div>Anclada: <span id="d-placed">no</span></div>
       <div>Anchors: <span id="d-anchor">—</span></div>
     </div>
-
+ 
   </div><!-- /#ar-overlay -->
-
-
+ 
+ 
   <script>
   /* ================================================================
    *  MEDIDAS REALES DE LA TAZA (en metros — WebXR usa metros)
@@ -324,7 +324,7 @@
    *  occluder radius = radio_interior         = 0.0365 m ≈ 0.037 m
    *  occluder height = alto_taza              = 0.098 m
    * ================================================================ */
-
+ 
   /* ── Estado global ───────────────────────────────────── */
   let renderer, scene, camera;
   let xrSession  = null;
@@ -342,34 +342,34 @@
   let orbitSpeed = 40;           // grados/segundo
   let lastTime   = 0;
   let panueloTexture = null;
-
+ 
   /* ── Inicialización de Three.js ──────────────────────── */
   function initThree() {
     const canvas = document.getElementById('c');
-
+ 
     renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;        // habilitar WebXR en Three.js
-
+ 
     scene = new THREE.Scene();
-
+ 
     // Cámara: WebXR la controla automáticamente durante la sesión AR
     camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
     scene.add(camera);
-
+ 
     // Luz ambiental suave
     scene.add(new THREE.AmbientLight(0xffffff, 1));
-
+ 
     window.addEventListener('resize', () => {
       renderer.setSize(window.innerWidth, window.innerHeight);
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
     });
-
+ 
     console.log('[THREE] inicializado');
   }
-
+ 
   /* ── Reticle de hit-test ─────────────────────────────── */
   /*
    * El reticle es un anillo que se proyecta sobre la superficie
@@ -392,7 +392,7 @@
     scene.add(reticle);
     console.log('[RETICLE] creado');
   }
-
+ 
   /* ── Escena AR: pañuelo + occluder ───────────────────── */
   /*
    * La escena se crea una vez y se mueve al punto de colocación.
@@ -406,11 +406,11 @@
   function createARScene() {
     sceneGroup = new THREE.Group();
     sceneGroup.visible = false; // oculto hasta que se coloque
-
+ 
     // ── Pivot de órbita ─────────────────────────────────
     pivot = new THREE.Group();
     sceneGroup.add(pivot);
-
+ 
     // ── Pañuelo ─────────────────────────────────────────
     const panGeo = new THREE.PlaneGeometry(0.04, 0.04);
     const panMat = new THREE.MeshBasicMaterial({
@@ -422,7 +422,7 @@
     panueloMesh = new THREE.Mesh(panGeo, panMat);
     panueloMesh.position.x = 0.055; // radio de órbita en metros
     pivot.add(panueloMesh);
-
+ 
     // ── Occluder ─────────────────────────────────────────
     /*
      * Material depth-only: escribe en el depth buffer pero no
@@ -435,7 +435,7 @@
     occluderMesh = new THREE.Mesh(occGeo, occMat);
     occluderMesh.renderOrder = -1;
     sceneGroup.add(occluderMesh);
-
+ 
     // ── Debug cylinder ───────────────────────────────────
     const dbgGeo = new THREE.CylinderGeometry(0.037, 0.037, 0.098, 32);
     const dbgMat = new THREE.MeshBasicMaterial({
@@ -447,22 +447,22 @@
     debugCylMesh = new THREE.Mesh(dbgGeo, dbgMat);
     debugCylMesh.visible = false;
     sceneGroup.add(debugCylMesh);
-
+ 
     scene.add(sceneGroup);
     console.log('[SCENE] escena AR creada');
   }
-
+ 
   /* ── Funciones de calibración ────────────────────────── */
   function updateOrbitRadius(r) {
     if (panueloMesh) panueloMesh.position.x = r;
   }
-
+ 
   function updatePanueloSize(s) {
     if (panueloMesh) {
       panueloMesh.scale.set(s / 0.04, s / 0.04, 1);
     }
   }
-
+ 
   function updateOccluder(prop, val) {
     if (!occluderMesh) return;
     // Reconstruir geometría con el nuevo radio/alto
@@ -476,11 +476,11 @@
       debugCylMesh.geometry = geo.clone();
     }
   }
-
+ 
   function toggleDebugCyl(visible) {
     if (debugCylMesh) debugCylMesh.visible = visible;
   }
-
+ 
   function toggleCal() {
     const panel = document.getElementById('cal-panel');
     const btn   = document.getElementById('cal-btn');
@@ -488,7 +488,7 @@
     panel.style.display = open ? 'none' : 'block';
     btn.style.display   = open ? 'block' : 'none';
   }
-
+ 
   /* ── Billboard: el pañuelo siempre mira a la cámara ─── */
   function updateBillboard() {
     if (!panueloMesh || !sceneGroup.visible) return;
@@ -498,29 +498,29 @@
     // El pañuelo mira hacia la cámara
     panueloMesh.lookAt(camPos);
   }
-
+ 
   /* ── Colocar escena en el punto de hit-test ──────────── */
   async function placeScene(frame, referenceSpace) {
     if (!hitTestSource) return;
     const hitResults = frame.getHitTestResults(hitTestSource);
     if (hitResults.length === 0) return;
-
+ 
     const hit  = hitResults[0];
     const pose = hit.getPose(referenceSpace);
-
+ 
     // Mover la escena al punto de hit
     const pos = pose.transform.position;
     sceneGroup.position.set(pos.x, pos.y, pos.z);
     sceneGroup.visible = true;
     placed = true;
-
+ 
     // Actualizar UI
     document.getElementById('ar-hint').classList.add('hidden');
     document.getElementById('btn-reposition').style.display = 'block';
     document.getElementById('d-placed').textContent = 'sí';
-
+ 
     console.log('[PLACEMENT] escena colocada en', pos.x.toFixed(3), pos.y.toFixed(3), pos.z.toFixed(3));
-
+ 
     // ── Intentar crear WebXR anchor ──────────────────────
     /*
      * Los anchors son puntos fijos en el espacio 3D real.
@@ -547,7 +547,7 @@
       document.getElementById('d-anchor').textContent = 'no soportado';
     }
   }
-
+ 
   /* ── Reposicionar: vuelve al modo de selección ───────── */
   function reposition() {
     placed = false;
@@ -559,7 +559,7 @@
     document.getElementById('d-placed').textContent = 'no';
     console.log('[PLACEMENT] reposicionando');
   }
-
+ 
   /* ── Salir de AR ─────────────────────────────────────── */
   function exitAR() {
     if (xrSession) {
@@ -567,7 +567,7 @@
       console.log('[XR] sesión terminada por el usuario');
     }
   }
-
+ 
   /* ── Render loop ─────────────────────────────────────── */
   /*
    * Three.js setAnimationLoop en modo WebXR recibe (time, frame).
@@ -576,12 +576,12 @@
    */
   function startRenderLoop() {
     renderer.setAnimationLoop((time, frame) => {
-
+ 
       if (frame) {
         // ── Estamos dentro de una sesión XR ───────────────
         const session       = renderer.xr.getSession();
         const referenceSpace = renderer.xr.getReferenceSpace();
-
+ 
         // ── Configurar hit-test la primera vez ─────────────
         /*
          * hit-test necesita un 'viewer' reference space:
@@ -604,7 +604,7 @@
           });
           hitTestSourceRequested = true;
         }
-
+ 
         // ── Actualizar posición del reticle ────────────────
         if (hitTestSource) {
           const hits = frame.getHitTestResults(hitTestSource);
@@ -622,7 +622,7 @@
             }
           }
         }
-
+ 
         // ── Actualizar posición desde el anchor ────────────
         /*
          * Si el anchor está activo, en cada frame pedimos
@@ -642,10 +642,10 @@
             sceneGroup.quaternion.set(q.x, q.y, q.z, q.w);
           }
         }
-
+ 
         document.getElementById('d-state').textContent = 'AR activo ✓';
       }
-
+ 
       // ── Animación de órbita ────────────────────────────
       if (sceneGroup && sceneGroup.visible && pivot) {
         const delta = lastTime ? (time - lastTime) / 1000 : 0;
@@ -655,19 +655,19 @@
       } else {
         lastTime = time;
       }
-
+ 
       // ── Billboard ─────────────────────────────────────
       updateBillboard();
-
+ 
       // ── Renderizar ─────────────────────────────────────
       renderer.render(scene, camera);
     });
   }
-
+ 
   /* ── Iniciar sesión WebXR AR ─────────────────────────── */
   async function startAR() {
     console.log('[XR] solicitando sesión immersive-ar');
-
+ 
     try {
       xrSession = await navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: ['hit-test'],
@@ -679,17 +679,17 @@
         optionalFeatures: ['anchors', 'dom-overlay'],
         domOverlay: { root: document.getElementById('ar-overlay') }
       });
-
+ 
       console.log('[XR] sesión creada — dom-overlay:', xrSession.domOverlayState?.type);
-
+ 
       // Conectar la sesión a Three.js
       renderer.xr.setSession(xrSession);
-
+ 
       // Mostrar overlay AR, ocultar landing
       document.getElementById('landing').style.display = 'none';
       document.getElementById('ar-overlay').style.display = 'block';
       document.getElementById('d-state').textContent = 'iniciando…';
-
+ 
       // Al tap del usuario → colocar escena
       xrSession.addEventListener('select', async () => {
         if (!placed && hitTestSource) {
@@ -701,7 +701,7 @@
           reposition();
         }
       });
-
+ 
       // Al terminar la sesión
       xrSession.addEventListener('end', () => {
         xrSession = null;
@@ -716,27 +716,16 @@
         document.getElementById('btn-start').textContent = 'Iniciar AR';
         console.log('[XR] sesión terminada');
       });
-
+ 
     } catch (err) {
       console.error('[XR] error al iniciar sesión:', err);
       alert('Error al iniciar AR: ' + err.message);
     }
   }
-
+ 
   // Flag para colocación pendiente (necesita frame actual)
   let pendingPlacement = false;
-
-  /* ── Parchar el render loop para capturar frame de placement */
-  const _origLoop = renderer.setAnimationLoop.bind(renderer);
-  // Reemplazamos el loop para interceptar el frame cuando hay pending placement
-  function patchedLoop(time, frame) {
-    if (pendingPlacement && frame && hitTestSource) {
-      const referenceSpace = renderer.xr.getReferenceSpace();
-      placeScene(frame, referenceSpace);
-      pendingPlacement = false;
-    }
-  }
-
+ 
   /* ── Verificar soporte WebXR al cargar ───────────────── */
   /*
    * Se corre PRIMERO antes de inicializar Three.js.
@@ -757,19 +746,19 @@
   async function checkWebXRSupport() {
     const btn  = document.getElementById('btn-start');
     const note = document.getElementById('landing-note');
-
+ 
     // Mostrar info de diagnóstico
     const ua = navigator.userAgent;
     console.log('[XR] User Agent:', ua);
     console.log('[XR] navigator.xr:', !!navigator.xr);
-
+ 
     if (!navigator.xr) {
       note.textContent = 'navigator.xr no disponible en este browser';
       console.warn('[XR] navigator.xr no existe');
       showUnsupported();
       return;
     }
-
+ 
     try {
       // Timeout de seguridad: si isSessionSupported no responde en 4s
       // consideramos que no está soportado
@@ -779,7 +768,7 @@
           setTimeout(() => reject(new Error('timeout')), 4000)
         )
       ]);
-
+ 
       if (supported) {
         btn.textContent = 'Iniciar AR';
         btn.disabled = false;
@@ -803,13 +792,13 @@
       showUnsupported();
     }
   }
-
+ 
   function showUnsupported() {
     document.getElementById('landing').style.display = 'none';
     document.getElementById('unsupported').style.display = 'flex';
     console.warn('[XR] mostrando pantalla de no soporte');
   }
-
+ 
   /* ── Cargar textura del pañuelo ──────────────────────── */
   function loadAssets() {
     return new Promise((resolve) => {
@@ -818,7 +807,7 @@
         console.warn('[ASSET] timeout cargando panuelo.png — usando fallback');
         resolve();
       }, 5000);
-
+ 
       const loader = new THREE.TextureLoader();
       loader.load(
         '../taza-abuelas/assets/panuelo.png',
@@ -838,16 +827,16 @@
       );
     });
   }
-
+ 
   /* ── Arranque ────────────────────────────────────────── */
   (async () => {
     // 1. Verificar soporte WebXR PRIMERO (antes de cargar Three.js)
     // Si no hay soporte, no tiene sentido inicializar nada más
     await checkWebXRSupport();
-
+ 
     // Si se mostró la pantalla de no soporte, cortar acá
     if (document.getElementById('unsupported').style.display === 'flex') return;
-
+ 
     // 2. Inicializar Three.js y escena
     try {
       initThree();
@@ -856,11 +845,11 @@
       document.getElementById('landing-note').textContent = 'Error WebGL: ' + e.message;
       return;
     }
-
+ 
     await loadAssets();
     createReticle();
     createARScene();
-
+ 
     // 3. Render loop principal
     renderer.setAnimationLoop((time, frame) => {
       // Placement pendiente (tap del usuario)
@@ -869,11 +858,11 @@
         placeScene(frame, referenceSpace);
         pendingPlacement = false;
       }
-
+ 
       if (frame) {
         const session        = renderer.xr.getSession();
         const referenceSpace = renderer.xr.getReferenceSpace();
-
+ 
         // Configurar hit-test source la primera vez
         if (!hitTestSourceRequested) {
           session.requestReferenceSpace('viewer').then(viewerSpace => {
@@ -888,7 +877,7 @@
           });
           hitTestSourceRequested = true;
         }
-
+ 
         // Actualizar reticle
         if (hitTestSource) {
           const hits = frame.getHitTestResults(hitTestSource);
@@ -903,7 +892,7 @@
             document.getElementById('d-hit').textContent = 'buscando…';
           }
         }
-
+ 
         // Actualizar posición desde anchor (mantiene la escena fija en el mundo)
         if (xrAnchor && xrAnchor.anchorSpace && sceneGroup) {
           const anchorPose = frame.getPose(xrAnchor.anchorSpace, referenceSpace);
@@ -914,10 +903,10 @@
             sceneGroup.quaternion.set(q.x, q.y, q.z, q.w);
           }
         }
-
+ 
         document.getElementById('d-state').textContent = 'AR activo ✓';
       }
-
+ 
       // Animación de órbita
       if (sceneGroup && sceneGroup.visible && pivot) {
         const delta = lastTime ? (time - lastTime) / 1000 : 0;
@@ -927,13 +916,13 @@
       } else {
         lastTime = time;
       }
-
+ 
       updateBillboard();
       renderer.render(scene, camera);
     });
-
+ 
   })();
   </script>
-
+ 
 </body>
 </html>
