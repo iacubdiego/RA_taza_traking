@@ -113,28 +113,18 @@
      *  Circunf.:    26.0  cm   →  verificación: 26/π = 8.27 cm  ✓
      *  Pared:        4    mm   →  radio interior  = 3.65 cm
      *
-     *  MARCADOR: 6.5 × 9.8 cm  →  1 unidad MindAR = 6.5 cm (ancho)
+     *  VALORES POR DEFECTO — empíricos (independientes del marker)
      * ─────────────────────────────────────────────────────────────────
-     *  El marker ocupa todo el alto de la taza (9.8 cm), por lo tanto
-     *  su centro vertical coincide con el centro de la taza → ΔY = 0,
-     *  no se necesita corrección en Y.
+     *  Estos valores fueron calibrados visualmente con la taza real.
+     *  No dependen del tamaño del marker — son un buen punto de
+     *  partida para cualquier marker y se ajustan con el panel.
      *
-     *  orbit-center Z  =  -(radio externo / u)  =  -4.05/6.5  =  -0.623
-     *    La taza está DETRÁS del marker → desplazamos en -Z.
-     *
-     *  orbit-center Y  =  0
-     *    Sin corrección: el marker ya está centrado verticalmente.
-     *
-     *  occluder radius =  radio interior / u    =  3.65/6.5  =   0.562
-     *    Radio interior para no cortar el pañuelo en el borde visible.
-     *
-     *  occluder height =  alto taza / u         =  9.8/6.5   =   1.508
-     *
-     *  orbit radius    =  radio externo/u + 0.1 =  0.623+0.10=   0.723
-     *    El pañuelo orbita levemente afuera de la taza.
-     *
-     *  base Y          =  -(occluder height / 2)=  -1.508/2  =  -0.754
-     *    La base queda al nivel del fondo de la taza.
+     *  orbit radius    =  0.70   (radio de órbita del pañuelo)
+     *  Z offset        = -0.65   (eje central de la taza detrás del marker)
+     *  Y offset        =  0.00   (sin corrección vertical)
+     *  occluder radius =  0.55   (radio del cilindro invisible)
+     *  occluder height =  1.20   (alto del cilindro invisible)
+     *  base Y          = -0.60   (posición vertical de la base)
      * ================================================================ */
 
     /* ──────────────────────────────────────────────────────
@@ -557,8 +547,8 @@
     <hr>
     <div class="sec">Pañuelo</div>
 
-    <label>Radio órbita: <span class="v" id="v-r">0.72</span>
-      <input type="range" min="0.3" max="2.0" step="0.02" value="0.72" oninput="
+    <label>Radio órbita: <span class="v" id="v-r">0.70</span>
+      <input type="range" min="0.3" max="2.0" step="0.02" value="0.70" oninput="
         document.getElementById('v-r').textContent = (+this.value).toFixed(2);
         document.getElementById('panuelo').setAttribute('position', this.value + ' 0 0');
         console.log('[CAL] radio órbita →', this.value);
@@ -593,8 +583,8 @@
       X: lateral (útil si el logo no está centrado en la taza)
     -->
 
-    <label>Z (profundidad): <span class="v" id="v-z">-0.62</span>
-      <input type="range" min="-2.0" max="0" step="0.02" value="-0.62" oninput="
+    <label>Z (profundidad): <span class="v" id="v-z">-0.65</span>
+      <input type="range" min="-2.0" max="0" step="0.02" value="-0.65" oninput="
         document.getElementById('v-z').textContent = (+this.value).toFixed(2);
         var c = document.getElementById('orbit-center');
         var p = c.getAttribute('position');
@@ -633,8 +623,8 @@
       Ajustar Y si el cilindro no está bien centrado verticalmente.
     -->
 
-    <label>Radio: <span class="v" id="v-or">0.56</span>
-      <input type="range" min="0.2" max="1.5" step="0.02" value="0.56" oninput="
+    <label>Radio: <span class="v" id="v-or">0.55</span>
+      <input type="range" min="0.2" max="1.5" step="0.02" value="0.55" oninput="
         document.getElementById('v-or').textContent = (+this.value).toFixed(2);
         document.getElementById('occluder-cyl').setAttribute('radius', this.value);
         document.getElementById('debug-cyl').setAttribute('radius', this.value);
@@ -642,8 +632,8 @@
       ">
     </label>
 
-    <label>Alto: <span class="v" id="v-oh">1.51</span>
-      <input type="range" min="0.5" max="4.0" step="0.05" value="1.51" oninput="
+    <label>Alto: <span class="v" id="v-oh">1.20</span>
+      <input type="range" min="0.5" max="4.0" step="0.05" value="1.20" oninput="
         document.getElementById('v-oh').textContent = (+this.value).toFixed(2);
         document.getElementById('occluder-cyl').setAttribute('height', this.value);
         document.getElementById('debug-cyl').setAttribute('height', this.value);
@@ -686,8 +676,8 @@
       ">
     </label>
 
-    <label>Y (altura): <span class="v" id="v-by">-0.75</span>
-      <input type="range" min="-3.0" max="0.5" step="0.05" value="-0.75" oninput="
+    <label>Y (altura): <span class="v" id="v-by">-0.60</span>
+      <input type="range" min="-3.0" max="0.5" step="0.05" value="-0.60" oninput="
         document.getElementById('v-by').textContent = (+this.value).toFixed(2);
         document.getElementById('ar-base').setAttribute('position', '0 ' + this.value + ' 0');
         console.log('[CAL] base Y →', this.value);
@@ -786,14 +776,10 @@
            Traslada el origen desde el centro del logo hasta el
            eje geométrico central de la taza (el centro real).
 
-           Z = -0.623  →  la taza está detrás del marker (-Z)
-                          radio externo = 4.05cm / 6.5cm = 0.623 u
-
-           Y = 0.00    →  el marker ocupa todo el alto de la taza,
-                          por lo tanto su centro ya coincide con el
-                          centro geométrico. Sin corrección necesaria.
+           Z = -0.65   →  valor empírico de calibración visual
+           Y = 0.00    →  sin corrección vertical
       -->
-      <a-entity id="orbit-center" position="0 0 -0.623" angle-compensation="strength: 1.0; maxAngle: 70">
+      <a-entity id="orbit-center" position="0 0 -0.65" angle-compensation="strength: 1.0; maxAngle: 70">
 
         <!-- ──────────────────────────────────────────────────
              ORBIT-PIVOT
@@ -813,7 +799,7 @@
           -->
           <a-plane
             id="panuelo"
-            position="0.723 0 0"
+            position="0.70 0 0"
             width="0.35"
             height="0.35"
             material="
@@ -836,13 +822,13 @@
 
              El pañuelo se descarta cuando está detrás del cilindro.
 
-             radio  = radio interior = 3.65cm / 6.5cm = 0.562 u
-             height = alto taza      = 9.8cm  / 6.5cm = 1.508 u
+             radio  = 0.55  (valor empírico)
+             height = 1.20  (valor empírico)
         -->
         <a-cylinder
           id="occluder-cyl"
-          radius="0.562"
-          height="1.508"
+          radius="0.55"
+          height="1.20"
           position="0 0 0"
           occluder
         ></a-cylinder>
@@ -856,8 +842,8 @@
         -->
         <a-cylinder
           id="debug-cyl"
-          radius="0.562"
-          height="1.508"
+          radius="0.55"
+          height="1.20"
           position="0 0 0"
           material="color: #ff0066; opacity: 0.3; transparent: true; side: double"
           visible="false"
@@ -868,14 +854,14 @@
              ──────────────────────────────────────────────────
              Imagen circular horizontal debajo de la taza.
              rotation="-90 0 0" → acostada en el plano XZ
-             position.y = -(occluder_height / 2) = -0.754 u
+             position.y = -0.60  (valor empírico)
                           al nivel del fondo de la taza
         -->
         <a-circle
           id="ar-base"
           radius="1.0"
           rotation="-90 0 0"
-          position="0 -0.754 0"
+          position="0 -0.60 0"
           material="
             src: #base-tex;
             transparent: true;
